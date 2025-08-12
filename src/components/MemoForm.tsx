@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import {
   Memo,
   MemoFormData,
@@ -8,10 +9,16 @@ import {
   DEFAULT_CATEGORIES,
 } from '@/types/memo'
 
+// MDEditor를 동적 임포트 (SSR 이슈 방지)
+const MDEditor = dynamic(
+  () => import('@uiw/react-md-editor'),
+  { ssr: false }
+)
+
 interface MemoFormProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: MemoFormData) => void
+  onSubmit: (data: MemoFormData) => Promise<void>
   editingMemo?: Memo | null
 }
 
@@ -49,14 +56,13 @@ export default function MemoForm({
     setTagInput('')
   }, [editingMemo, isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.title.trim() || !formData.content.trim()) {
       alert('제목과 내용을 모두 입력해주세요.')
       return
     }
-    onSubmit(formData)
-    onClose()
+    await onSubmit(formData)
   }
 
   const handleAddTag = () => {
@@ -84,11 +90,29 @@ export default function MemoForm({
     }
   }
 
+  const handleBackgroundClick = (e: React.MouseEvent) => {
+    // 모달 컨테이너를 클릭했을 때만 닫기
+    if (e.target === e.currentTarget) {
+      onClose()
+    }
+  }
+
+  const handleModalClick = (e: React.MouseEvent) => {
+    // 모달 내부 클릭 시 이벤트 전파 중지
+    e.stopPropagation()
+  }
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      onClick={handleBackgroundClick}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={handleModalClick}
+      >
         <div className="p-6">
           {/* 헤더 */}
           <div className="flex justify-between items-center mb-6">
@@ -168,28 +192,26 @@ export default function MemoForm({
               </select>
             </div>
 
-            {/* 내용 */}
+            {/* 내용 - 마크다운 에디터 */}
             <div>
-              <label
-                htmlFor="content"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                내용 *
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                내용 * (마크다운 지원)
               </label>
-              <textarea
-                id="content"
-                value={formData.content}
-                onChange={e =>
-                  setFormData(prev => ({
-                    ...prev,
-                    content: e.target.value,
-                  }))
-                }
-                className="placeholder-gray-400 text-gray-400 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
-                placeholder="메모 내용을 입력하세요"
-                rows={8}
-                required
-              />
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <MDEditor
+                  value={formData.content}
+                  onChange={(value) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      content: value || '',
+                    }))
+                  }
+                  preview="live"
+                  height={300}
+                  data-color-mode="light"
+                  className="markdown-editor"
+                />
+              </div>
             </div>
 
             {/* 태그 */}

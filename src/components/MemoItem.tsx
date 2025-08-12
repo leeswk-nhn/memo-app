@@ -1,14 +1,23 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { Memo, MEMO_CATEGORIES } from '@/types/memo'
+
+// MDEditor 동적 임포트 (SSR 이슈 방지) - 프리뷰 전용
+
+const MarkdownPreview = dynamic(
+  () => import('@uiw/react-md-editor').then((mod) => ({ default: mod.default.Markdown })),
+  { ssr: false }
+)
 
 interface MemoItemProps {
   memo: Memo
   onEdit: (memo: Memo) => void
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<boolean>
+  onView?: (memo: Memo) => void
 }
 
-export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
+export default function MemoItem({ memo, onEdit, onDelete, onView }: MemoItemProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('ko-KR', {
@@ -31,8 +40,19 @@ export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
     return colors[category as keyof typeof colors] || colors.other
   }
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // 버튼 클릭 시에는 카드 클릭 이벤트 방지
+    if ((e.target as HTMLElement).closest('button')) {
+      return
+    }
+    onView?.(memo)
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200">
+    <div 
+      className="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+      onClick={handleCardClick}
+    >
       {/* 헤더 */}
       <div className="flex justify-between items-start mb-3">
         <div className="flex-1">
@@ -74,9 +94,12 @@ export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
             </svg>
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               if (window.confirm('정말로 이 메모를 삭제하시겠습니까?')) {
-                onDelete(memo.id)
+                const success = await onDelete(memo.id)
+                if (!success) {
+                  alert('메모 삭제에 실패했습니다.')
+                }
               }
             }}
             className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -99,11 +122,21 @@ export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
         </div>
       </div>
 
-      {/* 내용 */}
-      <div className="mb-4">
-        <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">
-          {memo.content}
-        </p>
+      {/* 내용 - 마크다운 미리보기 */}
+      <div className="mb-4 overflow-hidden">
+        <div className="text-gray-700 text-sm leading-relaxed line-clamp-3">
+          <MarkdownPreview 
+            source={memo.content.length > 150 ? memo.content.substring(0, 150) + '...' : memo.content}
+            style={{ 
+              whiteSpace: 'unset',
+              backgroundColor: 'transparent',
+              color: 'inherit',
+              fontSize: '0.875rem',
+              lineHeight: '1.25rem'
+            }}
+            className="prose-sm max-w-none [&>*]:mb-1 [&>p]:mb-1 [&>h1]:text-sm [&>h2]:text-sm [&>h3]:text-sm [&>h4]:text-sm [&>h5]:text-sm [&>h6]:text-sm"
+          />
+        </div>
       </div>
 
       {/* 태그 */}
